@@ -237,6 +237,12 @@ options:
       - List of custom DNS servers for the container.
     required: false
     default: null
+  dns_search:
+    version_added: "2.2"
+    description:
+      - List of custom DNS search domains.
+    required: false
+    default: null
   detach:
     description:
       - Enable detached mode to leave the container running in background. If
@@ -675,6 +681,7 @@ class DockerManager(object):
     _cap_ver_req = {
             'devices': ((0, 7, 0), '1.2'),
             'dns': ((0, 3, 0), '1.10'),
+            'dns_search': ((0, 3, 0), '1.10'),
             'volumes_from': ((0, 3, 0), '1.10'),
             'restart_policy': ((0, 5, 0), '1.14'),
             'extra_hosts': ((0, 7, 0), '1.3.1'),
@@ -950,7 +957,7 @@ class DockerManager(object):
         }
 
         optionals = {}
-        for optional_param in ('devices', 'dns', 'volumes_from',
+        for optional_param in ('devices', 'dns', 'dns_search', 'volumes_from',
                 'restart_policy', 'restart_policy_retry', 'pid', 'extra_hosts',
                 'log_driver', 'cap_add', 'cap_drop', 'read_only', 'log_opt'):
             optionals[optional_param] = self.module.params.get(optional_param)
@@ -962,6 +969,10 @@ class DockerManager(object):
         if optionals['dns'] is not None:
             self.ensure_capability('dns')
             params['dns'] = optionals['dns']
+
+        if optionals['dns_search'] is not None:
+            self.ensure_capability('dns_search')
+            params['dns_search'] = optionals['dns_search']
 
         if optionals['volumes_from'] is not None:
             self.ensure_capability('volumes_from')
@@ -1471,6 +1482,15 @@ class DockerManager(object):
                 differing.append(container)
                 continue
 
+            # DNS_SEARCH
+
+            expected_dns_search = set(self.module.params.get('dns_search') or [])
+            actual_dns_search = set(container['HostConfig']['DnsSearch'] or [])
+            if actual_dns_search != expected_dns_search:
+                self.reload_reasons.append('dns_search ({0} => {1})'.format(actual_dns_search, expected_dns_search))
+                differing.append(container)
+                continue
+
             # VOLUMES_FROM
 
             expected_volumes_from = set(self.module.params.get('volumes_from') or [])
@@ -1870,6 +1890,7 @@ def main():
             env             = dict(type='dict'),
             env_file        = dict(default=None),
             dns             = dict(),
+            dns_search      = dict(default=None, type='list'),
             detach          = dict(default=True, type='bool'),
             state           = dict(default='started', choices=['present', 'started', 'reloaded', 'restarted', 'stopped', 'killed', 'absent', 'running']),
             signal          = dict(default=None),
